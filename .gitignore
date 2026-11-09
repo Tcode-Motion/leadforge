@@ -1,13 +1,16 @@
+# ====================================================================
 # LeadForge .gitignore
-# The dashboard writes all live state under dashboard/data. Only the folder
-# marker and example files are ever committed.
+# ====================================================================
 
-# App setup files with real secrets
+# Environment & Secrets (Never commit credentials or tokens)
 .env
+*.env
 */.env
-.env.local
+*.env.*
+!.env.example
+!*/.env.example
 
-# Dashboard live state
+# Dashboard Dynamic State & Storage
 dashboard/data/*
 !dashboard/data/KEEP_THIS_FOLDER.txt
 !dashboard/data/*.example
@@ -17,31 +20,72 @@ dashboard/data/notes/
 dashboard/data/runtime/
 dashboard/data/pitches/
 dashboard/data/reports/
+dashboard/data/whatsapp_session/
+dashboard/data/whatsapp_agent_state.json
 dashboard/data/leads.json
 dashboard/data/ai-settings.json
 dashboard/data/server-info.json
 dashboard/data/app-ports.json
+dashboard/data/apps_data.json
+dashboard/data/agency-profile.json
+dashboard/data/agency_profile.json
 dashboard/data/chatwoot-sync.json
 dashboard/data/latest.csv
 dashboard/data/latest-meta.json
 
-# Generated app runtime files
+# Docker & Container Generated Runtime Files
 docker-compose.leadforge.yml
 
-# Scraper and reader results
+# Scraper & Crawler Output Cache
 results*.csv
 */results.csv
 2-understand-crawl4ai/output/
 
-# Python
+# Python Build & Bytecode
 __pycache__/
-*.pyc
-*.pyo
+*/__pycache__/
+*/*/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 .venv/
 venv/
+ENV/
+env/
 
-# Logs and scratch
+# Playwright & Testing Outputs
+.pytest_cache/
+test-results/
+playwright-report/
+blob-report/
+tests/__pycache__/
+tests/.pytest_cache/
+
+# OS & Editor Files
 *.log
 *.tmp
+*.bak
+*.swp
+*~
 .DS_Store
 Thumbs.db
+desktop.ini
+.vscode/
+.idea/

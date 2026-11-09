@@ -11,12 +11,13 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 from pathlib import Path
 
-SRC = Path(os.environ.get("LF_SRC", str(Path.home() / "workspace/leadforge-repo/leadforge")))
-WORK = Path("/tmp/lf_fault")
+SRC = Path(os.environ.get("LF_SRC", str(Path(__file__).resolve().parent.parent)))
+WORK = Path(os.environ.get("LF_WORK", str(Path(tempfile.gettempdir()) / "lf_fault")))
 FAKEBIN = WORK / "fakebin"
 RESULTS = []
 
@@ -52,7 +53,7 @@ def http(port, method, path, form=None, raw_body=None, timeout=30):
 
 def start_server(copy_dir, port, extra_env=None):
     env = dict(os.environ)
-    env["PATH"] = str(FAKEBIN) + ":" + env.get("PATH", "")
+    env["PATH"] = str(FAKEBIN) + os.pathsep + env.get("PATH", "")
     env["LEADFORGE_PORT"] = str(port)
     env.update(extra_env or {})
     log_file = open(WORK / f"server-{port}.log", "w")
@@ -84,11 +85,25 @@ def stop_server(proc):
         proc.kill()
 
 
+def remove_readonly(func, path, excinfo):
+    try:
+        import stat
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    except Exception:
+        pass
+
+
+def safe_rmtree(path):
+    if os.path.exists(path):
+        shutil.rmtree(path, onexc=remove_readonly)
+
+
 def make_copy(name):
     dest = WORK / name
     if dest.exists():
-        shutil.rmtree(dest)
-    shutil.copytree(SRC, dest, ignore=shutil.ignore_patterns("__pycache__", "preview_*.png", "google-maps-scraper.exe"))
+        safe_rmtree(dest)
+    shutil.copytree(SRC, dest, ignore=shutil.ignore_patterns(".git", "__pycache__", "preview_*.png", "google-maps-scraper.exe", "server-info.json"))
     return dest
 
 
@@ -120,12 +135,17 @@ def set_mode(value):
 
 def main():
     if WORK.exists():
-        shutil.rmtree(WORK)
+        safe_rmtree(WORK)
     WORK.mkdir(parents=True)
     FAKEBIN.mkdir(parents=True)
     docker = FAKEBIN / "docker"
     docker.write_text('#!/bin/sh\ncase "$1" in\n  info) echo "27.0.0"; exit 0 ;;\n  compose) exit 0 ;;\n  --version) echo "Docker version 27.0.0, build test"; exit 0 ;;\n  *) exit 0 ;;\nesac\n')
-    docker.chmod(0o755)
+    try:
+        docker.chmod(0o755)
+    except Exception:
+        pass
+    docker_bat = FAKEBIN / "docker.cmd"
+    docker_bat.write_text('@echo off\nif "%1"=="info" (echo 27.0.0 & exit /b 0)\nif "%1"=="compose" (exit /b 0)\nif "%1"=="--version" (echo Docker version 27.0.0, build test & exit /b 0)\nexit /b 0\n')
 
     stub_env = dict(os.environ)
     stub_env["LF_FAULT_MODE"] = str(WORK / "stub_mode")
@@ -279,15 +299,26 @@ def main():
         finally:
             stop_server(proc)
 
-        slow_scraper = WORK / "slow_scraper.sh"
-        slow_scraper.write_text(
-            "#!/bin/bash\n"
-            "out=\"\"\n"
-            "while [ $# -gt 0 ]; do case \"$1\" in -results) out=\"$2\"; shift 2;; *) shift;; esac; done\n"
-            "sleep 4\n"
-            "printf 'title,category,phone,website,review_rating,review_count,address\\nSlow Dental,Dental clinic,+91 90000 00009,,4.5,10,Slow Road Kolkata\\n' > \"$out\"\n"
+        slow_scraper_py = WORK / "slow_scraper.py"
+        slow_scraper_py.write_text(
+            "import sys, time\n"
+            "out = ''\n"
+            "args = sys.argv[1:]\n"
+            "for i in range(len(args)):\n"
+            "    if args[i] == '-results' and i + 1 < len(args):\n"
+            "        out = args[i+1]\n"
+            "time.sleep(4)\n"
+            "if out:\n"
+            "    with open(out, 'w', encoding='utf-8') as f:\n"
+            "        f.write('title,category,phone,website,review_rating,review_count,address\\nSlow Dental,Dental clinic,+91 90000 00009,,4.5,10,Slow Road Kolkata\\n')\n"
         )
-        slow_scraper.chmod(0o755)
+        if sys.platform == "win32":
+            slow_scraper = WORK / "slow_scraper.bat"
+            slow_scraper.write_text(f'@echo off\n"{sys.executable}" "{slow_scraper_py}" %*\n')
+        else:
+            slow_scraper = WORK / "slow_scraper.sh"
+            slow_scraper.write_text(f'#!/bin/sh\n"{sys.executable}" "{slow_scraper_py}" "$@"\n')
+            slow_scraper.chmod(0o755)
         copy5 = make_copy("copyF5")
         env5 = dict(ai_env)
         env5["PIPELINE_SCRAPER_BIN"] = str(slow_scraper)
