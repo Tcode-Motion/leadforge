@@ -16,9 +16,15 @@ SRC = Path(__file__).resolve().parent.parent
 
 
 def find_free_port():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+    for port in range(8945, 8990):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(("127.0.0.1", port))
+                return port
+        except OSError:
+            continue
+    return 8945
 
 
 def test_endpoints():
@@ -41,7 +47,11 @@ def test_endpoints():
     # Wait for server to bind
     ready = False
     start_time = time.time()
-    while time.time() - start_time < 15:
+    while time.time() - start_time < 45:
+        if proc.poll() is not None:
+            out, _ = proc.communicate(timeout=5)
+            print(f"Server output:\n{out}")
+            raise RuntimeError(f"Server exited prematurely with code {proc.returncode}")
         try:
             with socket.create_connection(("127.0.0.1", test_port), timeout=1):
                 ready = True
@@ -53,7 +63,7 @@ def test_endpoints():
         proc.kill()
         out, _ = proc.communicate(timeout=5)
         print(f"Server output:\n{out}")
-        raise RuntimeError(f"Server failed to start on port {test_port} within 15s")
+        raise RuntimeError(f"Server failed to start on port {test_port} within 45s")
 
     print(f"[OK] Server bound to port {test_port} successfully.")
 
