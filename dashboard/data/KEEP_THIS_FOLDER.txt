@@ -1,0 +1,9 @@
+Run outputs land in this folder. LeadForge creates what it needs.
+- runs: one folder per pipeline run, with its queries, results, and job log.
+- latest.csv: the last good lead list (the Leads page reads this).
+- latest-meta.json: what the last runs did, including zero results.
+- notes: one pitch note per lead website, written by the website reader.
+- logs: leadforge.log and errors.jsonl, capped by rotation.
+- app-ports.json: the app port choices LeadForge saved.
+- server-info.json: the running dashboard address, port, and start details.
+- runtime: reserved for LeadForge runtime files.

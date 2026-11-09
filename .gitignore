@@ -1,0 +1,47 @@
+# LeadForge .gitignore
+# The dashboard writes all live state under dashboard/data. Only the folder
+# marker and example files are ever committed.
+
+# App setup files with real secrets
+.env
+*/.env
+.env.local
+
+# Dashboard live state
+dashboard/data/*
+!dashboard/data/KEEP_THIS_FOLDER.txt
+!dashboard/data/*.example
+dashboard/data/logs/
+dashboard/data/runs/
+dashboard/data/notes/
+dashboard/data/runtime/
+dashboard/data/pitches/
+dashboard/data/reports/
+dashboard/data/leads.json
+dashboard/data/ai-settings.json
+dashboard/data/server-info.json
+dashboard/data/app-ports.json
+dashboard/data/chatwoot-sync.json
+dashboard/data/latest.csv
+dashboard/data/latest-meta.json
+
+# Generated app runtime files
+docker-compose.leadforge.yml
+
+# Scraper and reader results
+results*.csv
+*/results.csv
+2-understand-crawl4ai/output/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Logs and scratch
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
