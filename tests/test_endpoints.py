@@ -55,7 +55,7 @@ def test_endpoints():
         print(f"Server output:\n{out}")
         raise RuntimeError(f"Server failed to start on port {test_port} within 15s")
 
-    print(f"✓ Server bound to port {test_port} successfully.")
+    print(f"[OK] Server bound to port {test_port} successfully.")
 
     routes_to_test = [
         ("/", 200, "text/html"),

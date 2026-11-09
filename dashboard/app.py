@@ -8548,7 +8548,7 @@ class Handler(BaseHTTPRequestHandler):
 
 class LeadForgeHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
-    allow_reuse_address = False
+    allow_reuse_address = True
 
     def handle_error(self, request, client_address):
         exc_type, exc, tb = sys.exc_info()

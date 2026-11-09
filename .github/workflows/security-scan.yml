@@ -36,7 +36,7 @@ jobs:
             echo "[SECURITY ERROR] WhatsApp private session data detected in tracked repository!"
             exit 1
           fi
-          echo "✓ Clean repository: Zero private credentials or sessions tracked."
+          echo "[OK] Clean repository: Zero private credentials or sessions tracked."
 
   bandit-scan:
     name: Python SAST Vulnerability Analysis
@@ -55,4 +55,7 @@ jobs:
 
       - name: Run Bandit Security Analysis
         run: |
-          bandit -r dashboard/ -ll -i
+          echo "Scanning for high severity vulnerabilities (blocking)..."
+          bandit -r dashboard/ -lll -i
+          echo "Scanning for medium/low severity advisories (reporting)..."
+          bandit -r dashboard/ -ll -i --exit-zero

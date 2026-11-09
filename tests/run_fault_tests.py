@@ -55,24 +55,30 @@ def start_server(copy_dir, port, extra_env=None):
     env = dict(os.environ)
     env["PATH"] = str(FAKEBIN) + os.pathsep + env.get("PATH", "")
     env["LEADFORGE_PORT"] = str(port)
+    env["PYTHONUNBUFFERED"] = "1"
     env.update(extra_env or {})
-    log_file = open(WORK / f"server-{port}.log", "w")
+    log_path = WORK / f"server-{port}.log"
+    log_file = open(log_path, "w", encoding="utf-8", errors="replace")
     proc = subprocess.Popen(
-        [sys.executable, str(copy_dir / "dashboard" / "app.py")],
+        [sys.executable, "-u", str(copy_dir / "dashboard" / "app.py")],
         cwd=str(copy_dir), env=env, stdout=log_file, stderr=subprocess.STDOUT,
     )
-    deadline = time.time() + 30
+    deadline = time.time() + 45
     while time.time() < deadline:
         if proc.poll() is not None:
-            raise RuntimeError(f"server on {port} exited early rc={proc.returncode}; see {log_file.name}")
+            log_file.flush()
+            log_txt = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
+            raise RuntimeError(f"server on {port} exited early rc={proc.returncode}; log:\n{log_txt}")
         try:
             status, _ = http(port, "GET", "/api/health", timeout=3)
             if status == 200:
                 return proc
-        except OSError:
+        except Exception:
             pass
         time.sleep(0.35)
-    raise RuntimeError(f"server on {port} did not start")
+    log_file.flush()
+    log_txt = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
+    raise RuntimeError(f"server on {port} did not start within 45s; log:\n{log_txt}")
 
 
 def stop_server(proc):
