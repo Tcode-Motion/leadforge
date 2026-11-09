@@ -64,7 +64,7 @@ echo -e "      Python Version: ${PY_VERSION} ($($PYTHON_BIN --version))"
 # Check Python >= 3.10
 PY_MAJOR=$($PYTHON_BIN -c "import sys; print(sys.version_info.major)")
 PY_MINOR=$($PYTHON_BIN -c "import sys; print(sys.version_info.minor)")
-if [ "$PY_MAJOR" -lt 3 ] || ([ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]); then
+if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]; }; then
     echo -e "${RED}[ERROR] Python ${PY_VERSION} detected. LeadForge requires Python 3.10 or newer (tested up to 3.13).${NC}"
     exit 1
 fi

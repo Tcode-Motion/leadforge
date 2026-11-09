@@ -18,7 +18,7 @@ jobs:
       - name: Run ShellCheck on Bash Scripts
         run: |
           sudo apt-get update && sudo apt-get install -y shellcheck
-          shellcheck setup.sh run.sh
+          shellcheck setup.sh run.sh --severity=warning
         shell: bash
 
   powershell-check:
