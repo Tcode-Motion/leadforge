@@ -28,3 +28,4 @@ fi
 
 echo ""
 echo "Done. Your leads are saved in results.csv in this folder."
+
