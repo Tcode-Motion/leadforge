@@ -64,3 +64,4 @@ jobs:
         run: |
           ruff check dashboard/ tests/ --select E,F,W --ignore E501 --output-format github
         continue-on-error: true
+

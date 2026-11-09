@@ -43,7 +43,7 @@ jobs:
 
       - name: Syntax & Bytecode Compilation Check
         run: |
-          python -m py_compile dashboard/app.py dashboard/whatsapp_agent.py dashboard/standalone_apps.py dashboard/intelligence.py tests/*.py
+          python -m py_compile dashboard/app.py dashboard/whatsapp_agent.py dashboard/standalone_apps.py dashboard/intelligence.py 1-find-google-maps-scraper/scraper.py tests/*.py
         shell: bash
 
       - name: Run 19 Fault Injection Resilience Tests

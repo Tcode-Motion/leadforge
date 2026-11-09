@@ -16,6 +16,7 @@ import html
 import json
 import math
 import os
+import platform
 import re
 import secrets
 import shutil
@@ -238,15 +239,17 @@ SERVER_STATE = {
 }
 MAX_LOG_BYTES = 1_000_000
 
-# The scraper program. On Tanmoy's PC this is the Windows exe in folder 1.
+# The scraper program. On Windows this is the exe in folder 1. On macOS/Linux,
+# LeadForge automatically resolves the native binary or the universal Python scraper engine.
 # PIPELINE_SCRAPER_BIN can point somewhere else (used for dev testing).
 SCRAPER_BIN = os.environ.get(
     "PIPELINE_SCRAPER_BIN",
-    str(PACK_DIR / "1-find-google-maps-scraper" / "google-maps-scraper.exe"),
+    str(PACK_DIR / "1-find-google-maps-scraper" / ("google-maps-scraper.exe" if os.name == "nt" else "google-maps-scraper")),
 )
 # The python that has crawl4ai installed (folder 2 venv).
 # PIPELINE_CRAWL_PYTHON can override it (used for dev testing).
-_venv_python = PACK_DIR / "2-understand-crawl4ai" / "venv" / "Scripts" / "python.exe"
+_venv_python_dir = PACK_DIR / "2-understand-crawl4ai" / "venv"
+_venv_python = _venv_python_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 CRAWL_PYTHON = os.environ.get(
     "PIPELINE_CRAWL_PYTHON",
     str(_venv_python if _venv_python.exists() else sys.executable),
@@ -808,10 +811,109 @@ def crawl_setup_state():
     }
 
 
+def resolve_scraper_runner():
+    """
+    Dynamically resolves the best scraper runner for the current OS:
+    1. Custom override from PIPELINE_SCRAPER_BIN env var (if specified)
+    2. Native OS binary:
+       - Windows: PACK_DIR / "1-find-google-maps-scraper" / "google-maps-scraper.exe"
+       - macOS / Linux: PACK_DIR / "1-find-google-maps-scraper" / "google-maps-scraper" or PATH binary
+    3. Universal Cross-Platform Python Engine:
+       - PACK_DIR / "1-find-google-maps-scraper" / "scraper.py" (pure standard library, 0 deps, runs on macOS/Linux/Windows/Termux)
+    """
+    custom_bin = os.environ.get("PIPELINE_SCRAPER_BIN")
+    if custom_bin:
+        p = Path(custom_bin)
+        exists = p.exists()
+        executable = exists and (os.name == "nt" or os.access(p, os.X_OK))
+        return {
+            "display_path": custom_bin,
+            "found": exists,
+            "executable": executable,
+            "ready": exists and executable,
+            "runner_type": "custom",
+            "cmd_prefix": [custom_bin],
+        }
+
+    folder1 = PACK_DIR / "1-find-google-maps-scraper"
+
+    # 1. Native binary check for current platform
+    if os.name == "nt":
+        win_bin = folder1 / "google-maps-scraper.exe"
+        if win_bin.exists():
+            return {
+                "display_path": str(win_bin),
+                "found": True,
+                "executable": True,
+                "ready": True,
+                "runner_type": "native",
+                "cmd_prefix": [str(win_bin)],
+            }
+    else:
+        # On POSIX (macOS / Linux / Termux), check for native executable
+        unix_bin = folder1 / "google-maps-scraper"
+        if unix_bin.exists():
+            if not os.access(unix_bin, os.X_OK):
+                try:
+                    unix_bin.chmod(unix_bin.stat().st_mode | 0o755)
+                except OSError:
+                    pass
+            if os.access(unix_bin, os.X_OK):
+                return {
+                    "display_path": str(unix_bin),
+                    "found": True,
+                    "executable": True,
+                    "ready": True,
+                    "runner_type": "native",
+                    "cmd_prefix": [str(unix_bin)],
+                }
+        # Check PATH
+        system_bin = shutil.which("google-maps-scraper")
+        if system_bin:
+            return {
+                "display_path": system_bin,
+                "found": True,
+                "executable": True,
+                "ready": True,
+                "runner_type": "system",
+                "cmd_prefix": [system_bin],
+            }
+
+    # 2. Universal Cross-Platform Python Engine (standard library only)
+    scraper_py = folder1 / "scraper.py"
+    if scraper_py.exists():
+        return {
+            "display_path": str(scraper_py),
+            "found": True,
+            "executable": True,
+            "ready": True,
+            "runner_type": "python_universal",
+            "cmd_prefix": [sys.executable, str(scraper_py)],
+        }
+
+    # Fallback default if neither binary nor scraper.py exists
+    default_name = "google-maps-scraper.exe" if os.name == "nt" else "google-maps-scraper"
+    default_path = folder1 / default_name
+    return {
+        "display_path": str(default_path),
+        "found": False,
+        "executable": False,
+        "ready": False,
+        "runner_type": "none",
+        "cmd_prefix": [str(default_path)],
+    }
+
+
 def scraper_state():
-    path = Path(SCRAPER_BIN)
-    executable = path.exists() and (os.name == "nt" or os.access(path, os.X_OK))
-    return {"path": SCRAPER_BIN, "found": path.exists(), "executable": executable, "ready": path.exists() and executable}
+    runner = resolve_scraper_runner()
+    return {
+        "path": runner["display_path"],
+        "found": runner["found"],
+        "executable": runner["executable"],
+        "ready": runner["ready"],
+        "runner_type": runner["runner_type"],
+        "cmd_prefix": runner["cmd_prefix"],
+    }
 
 
 def job_log(line):
@@ -1283,23 +1385,24 @@ def _execute_pipeline(location, business_type, max_results, mode="full"):
     scraper = scraper_state()
     if not scraper["found"]:
         message = "The scraper program was not found."
-        log_error("pipeline", "SCRAPER_NOT_FOUND", message, scraper["path"], "Check that folder 1 still contains google-maps-scraper.exe, or reinstall the pack.")
+        log_error("pipeline", "SCRAPER_NOT_FOUND", message, scraper["path"], "Check that folder 1 contains google-maps-scraper or scraper.py, or reinstall the pack.")
         job_set(state="failed", step="Failed", error=f"{message} Expected file: {scraper['path']}", error_code="SCRAPER_NOT_FOUND")
         job_log(message)
         return
     if not scraper["executable"]:
         message = "The scraper program is present but cannot be executed."
-        log_error("pipeline", "SCRAPER_NOT_EXECUTABLE", message, scraper["path"], "Check the file permissions and antivirus quarantine, then try again.")
+        log_error("pipeline", "SCRAPER_NOT_EXECUTABLE", message, scraper["path"], "Check the file permissions (chmod +x) and antivirus quarantine, then try again.")
         job_set(state="failed", step="Failed", error=message, error_code="SCRAPER_NOT_EXECUTABLE")
         job_log(message)
         return
 
     coords = resolve_location_coordinates(location)
-    is_custom_scraper = bool(os.environ.get("PIPELINE_SCRAPER_BIN"))
+    is_custom_scraper = (scraper.get("runner_type") == "custom")
+    base_prefix = scraper.get("cmd_prefix") or [scraper["path"]]
+    job_log(f"Lead search engine: {scraper.get('runner_type', 'native')} ({Path(scraper['path']).name})")
     if coords and not is_custom_scraper:
         job_log(f"Target coordinates: {coords} (Fast direct mode)")
-        cmd = [
-            SCRAPER_BIN,
+        cmd = base_prefix + [
             "-input", str(queries_file),
             "-results", str(results_csv),
             "-depth", str(depth),
@@ -1310,8 +1413,7 @@ def _execute_pipeline(location, business_type, max_results, mode="full"):
             "-extra-reviews",
         ]
     else:
-        cmd = [
-            SCRAPER_BIN,
+        cmd = base_prefix + [
             "-input", str(queries_file),
             "-results", str(results_csv),
             "-exit-on-inactivity", "3m",
@@ -6289,12 +6391,23 @@ def whatsapp_bot_page():
 def setup_status_rows():
     rows = []
     scraper = scraper_state()
-    if scraper.get("found"):
+    if scraper.get("ready"):
+        runner_lbl = "Universal Python Engine" if scraper.get("runner_type") == "python_universal" else "Native binary"
         rows.append({
             "name": "Lead finder program",
             "state": "ready",
             "label": "Ready",
-            "detail": "The program file is in folder 1. No key is needed.",
+            "detail": f"{runner_lbl} in folder 1 ({Path(scraper['path']).name}). No key is needed.",
+            "fields": [],
+            "anchor": "",
+            "action": "",
+        })
+    elif scraper.get("found"):
+        rows.append({
+            "name": "Lead finder program",
+            "state": "warning",
+            "label": "Needs Permission",
+            "detail": f"Found ({Path(scraper['path']).name}) but execution permission is required. Run 'chmod +x' or run setup.sh.",
             "fields": [],
             "anchor": "",
             "action": "",
@@ -6304,7 +6417,7 @@ def setup_status_rows():
             "name": "Lead finder program",
             "state": "missing",
             "label": "Missing",
-            "detail": "The program file was not found in folder 1.",
+            "detail": "Neither google-maps-scraper nor scraper.py was found in folder 1.",
             "fields": [],
             "anchor": "",
             "action": "",
@@ -7502,11 +7615,12 @@ def health_data():
 
     scraper = scraper_state()
     if scraper["ready"]:
-        add("Lead finder program", "ok", f"Found and executable: {scraper['path']}")
+        runner_lbl = " [Universal Python Engine]" if scraper.get("runner_type") == "python_universal" else " [Native Binary]"
+        add("Lead finder program", "ok", f"Found and executable: {scraper['path']}{runner_lbl}")
     elif scraper["found"]:
-        add("Lead finder program", "error", f"Found but not executable: {scraper['path']}", "Check file permissions or antivirus quarantine.")
+        add("Lead finder program", "error", f"Found but not executable: {scraper['path']}", "Grant execution permission via 'chmod +x' or run setup.sh.")
     else:
-        add("Lead finder program", "error", f"Not found: {scraper['path']}", "Check that folder 1 contains google-maps-scraper.exe.")
+        add("Lead finder program", "error", f"Not found: {scraper['path']}", "Folder 1 must contain google-maps-scraper or scraper.py.")
 
     crawl = crawl_setup_state()
     if crawl["ready"]:
@@ -7803,8 +7917,11 @@ def troubleshooting_page(query=None):
         error_summary += f" Recent codes: {', '.join(recent_codes)}."
     
     dashboard_port = SERVER_STATE.get("port", 8790)
+    system_name = platform.system()
+    machine_arch = platform.machine()
+    py_ver = sys.version.split()[0]
     ai_prompt_text = (
-        f"I am running LeadForge (Local Client Acquisition Pipeline) on Windows with Python 3.13.\n"
+        f"I am running LeadForge (Local Client Acquisition Pipeline) on {system_name} ({machine_arch}) with Python {py_ver}.\n"
         f"Current Architecture & Status:\n"
         f"- Local Dashboard: http://127.0.0.1:{dashboard_port}\n"
         f"- Standalone Microservices (No Docker required):\n"
@@ -7813,7 +7930,7 @@ def troubleshooting_page(query=None):
         f"  * Cal.diy (Port 3002): Appointment Booking (Running standalone)\n"
         f"  * Twenty CRM (Port 3003): Pipeline & Deal Tracking (Running standalone)\n"
         f"  * Documenso (Port 3004): Contract & Document Signing (Running standalone)\n"
-        f"- Lead Finder: Scrapemate Maps Scraper (Status: {'Ready' if scraper['ready'] else 'Needs Attention'})\n"
+        f"- Lead Finder: Maps Scraper (Status: {'Ready' if scraper['ready'] else 'Needs Attention'} [{scraper.get('runner_type', 'native')}])\n"
         f"- Website Reader: Fast Built-in HTTP Reader (Status: Ready)\n"
         f"- Leads Stored: {lead_count} verified businesses in local database\n"
         f"- AI Key Status: {'Configured (' + ai_settings.get('provider', '') + ')' if has_ai_key else 'None saved (Smart Template Engine active)'}\n"
