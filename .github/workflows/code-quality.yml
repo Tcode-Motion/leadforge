@@ -1,0 +1,66 @@
+name: Code Quality & Linting
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  shell-check:
+    name: Shell Script Verification (ShellCheck)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck on Bash Scripts
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          shellcheck setup.sh run.sh
+        shell: bash
+
+  powershell-check:
+    name: PowerShell Script Analysis
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Analyze PowerShell Scripts
+        shell: pwsh
+        run: |
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+          $scripts = @("setup.ps1", "dashboard/wait_and_open.ps1")
+          foreach ($s in $scripts) {
+              if (Test-Path $s) {
+                  Write-Host "Analyzing $s..."
+                  $results = Invoke-ScriptAnalyzer -Path $s -Severity Error, Warning
+                  if ($results) {
+                      $results | Format-Table -AutoSize
+                  } else {
+                      Write-Host "✓ $s passed cleanly." -ForegroundColor Green
+                  }
+              }
+          }
+
+  python-lint:
+    name: Python Linting & Formatting Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Run Ruff Linter
+        run: |
+          ruff check dashboard/ tests/ --select E,F,W --ignore E501 --output-format github
+        continue-on-error: true

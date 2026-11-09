@@ -1,0 +1,60 @@
+name: Automated Release Packager
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build-release:
+    name: Build & Publish Release Assets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Prepare Clean Distribution Archive
+        run: |
+          TAG="${{ github.ref_name || inputs.tag_name }}"
+          DIST_DIR="leadforge-${TAG}"
+          mkdir -p "${DIST_DIR}"
+          
+          # Copy core application files excluding git and private data
+          rsync -av --progress ./ "${DIST_DIR}/" \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'dashboard/data/logs' \
+            --exclude 'dashboard/data/runs' \
+            --exclude 'dashboard/data/notes' \
+            --exclude 'dashboard/data/runtime' \
+            --exclude 'dashboard/data/pitches' \
+            --exclude 'dashboard/data/reports' \
+            --exclude 'dashboard/data/whatsapp_session' \
+            --exclude '__pycache__' \
+            --exclude 'venv' \
+            --exclude '.venv'
+            
+          # Create zip bundle
+          zip -r "leadforge-${TAG}-standalone.zip" "${DIST_DIR}"
+          
+          # Generate SHA256 Checksums
+          sha256sum "leadforge-${TAG}-standalone.zip" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            leadforge-*-standalone.zip
+            SHA256SUMS.txt
+          generate_release_notes: true
+          draft: false
+          prerelease: false

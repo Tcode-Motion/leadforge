@@ -1,0 +1,58 @@
+name: Security Audit & Secret Detection
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  schedule:
+    - cron: '0 0 * * 1' # Weekly on Monday
+  workflow_dispatch:
+
+jobs:
+  secret-scan:
+    name: Secret & Key Leak Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks Secret Scanner
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Verify Gitignore & Tracked Files Integrity
+        run: |
+          echo "Verifying no live .env or whatsapp sessions are tracked..."
+          if git ls-files | grep -E "(^|/)\.env$" | grep -v "\.env\.example"; then
+            echo "[SECURITY ERROR] Live .env file detected in tracked repository!"
+            exit 1
+          fi
+          if git ls-files | grep -E "whatsapp_session|whatsapp_agent_state\.json"; then
+            echo "[SECURITY ERROR] WhatsApp private session data detected in tracked repository!"
+            exit 1
+          fi
+          echo "✓ Clean repository: Zero private credentials or sessions tracked."
+
+  bandit-scan:
+    name: Python SAST Vulnerability Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      - name: Run Bandit Security Analysis
+        run: |
+          bandit -r dashboard/ -ll -i

@@ -23,3 +23,4 @@ echo "Starting LeadForge at http://127.0.0.1:8790 ..."
 echo ""
 
 $PYTHON_BIN -u dashboard/app.py
+
